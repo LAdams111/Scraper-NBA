@@ -67,3 +67,12 @@ jobs/         # generatePlayerJobs, runPlayerWorkers
 | `npm run migrate`    | Apply schema (creates tables if missing) |
 | `npm run generate-jobs` | Enqueue all player URLs from index   |
 | `npm run workers`    | Run a single worker (run multiple for concurrency) |
+
+## Railway: "column url does not exist"
+
+If the worker crashes with **column \"url\" does not exist**, your Postgres is missing the `player_scrape_jobs` table or it has the wrong columns. Either:
+
+1. **Run the full migration** (creates all tables): connect to your Railway Postgres and run the SQL in `db/schema.sql`, or run `npm run migrate` locally with `DATABASE_URL` set to your Railway Postgres URL.
+2. **Create/fix only the jobs table**: run the SQL in `db/fix-player-scrape-jobs.sql` against your Railway Postgres (Option A creates the table; Option B adds missing columns to an existing table).
+
+After fixing the schema, redeploy or restart the Scraper-NBA service.

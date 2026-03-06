@@ -10,7 +10,33 @@ import { scrapeAndPersistPlayer } from '../scrapers/playerSeasonScraper.js';
 const MAX_RETRIES = 3;
 const POLL_MS = 3000;
 
+let jobsTableValid = true;
+
+async function checkJobsTableSchema() {
+  try {
+    await pool.query('SELECT id, url FROM player_scrape_jobs LIMIT 1');
+    return true;
+  } catch (err) {
+    if (err.code === '42703') {
+      console.error(
+        "Database table player_scrape_jobs is missing the 'url' column. " +
+        "Run the migration: npm run migrate (or apply db/schema.sql to your Railway Postgres)."
+      );
+      return false;
+    }
+    if (err.code === '42P01') {
+      console.error(
+        "Database table player_scrape_jobs does not exist. " +
+        "Run: npm run migrate (or apply db/schema.sql to your Railway Postgres)."
+      );
+      return false;
+    }
+    throw err;
+  }
+}
+
 async function claimJob() {
+  if (!jobsTableValid) return null;
   const client = await pool.connect();
   try {
     const selectRes = await client.query(
@@ -86,6 +112,14 @@ async function runWorker() {
   console.log('Starting NBA scraper workers...');
   await testConnection();
   console.log('Worker pool initialized');
+  jobsTableValid = await checkJobsTableSchema();
+  if (!jobsTableValid) {
+    console.log('Worker will stay up. Fix the schema and restart to process jobs.');
+    while (true) {
+      await new Promise((r) => setTimeout(r, 60000));
+      console.log('Waiting for player_scrape_jobs table (url column). Run: npm run migrate');
+    }
+  }
   console.log(`[Worker ${process.pid}] Started.`);
   while (true) {
     const hadJob = await processOneJob();
