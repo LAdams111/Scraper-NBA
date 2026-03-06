@@ -5,13 +5,34 @@ let nbaLeagueId = null;
 
 export async function getNbaLeagueId() {
   if (nbaLeagueId) return nbaLeagueId;
-  const r = await pool.query(
-    "SELECT id FROM leagues WHERE name = $1",
+  let r = await pool.query(
+    'SELECT id FROM leagues WHERE name = $1',
     [NBA_LEAGUE_NAME]
   );
-  if (r.rows.length === 0) throw new Error('NBA league not found. Run migrations first.');
-  nbaLeagueId = r.rows[0].id;
-  return nbaLeagueId;
+  if (r.rows.length > 0) {
+    nbaLeagueId = r.rows[0].id;
+    return nbaLeagueId;
+  }
+  try {
+    r = await pool.query(
+      'INSERT INTO leagues (name) VALUES ($1) RETURNING id',
+      [NBA_LEAGUE_NAME]
+    );
+    nbaLeagueId = r.rows[0].id;
+    return nbaLeagueId;
+  } catch (err) {
+    if (err.code === '23505') {
+      r = await pool.query(
+        'SELECT id FROM leagues WHERE name = $1',
+        [NBA_LEAGUE_NAME]
+      );
+      if (r.rows.length > 0) {
+        nbaLeagueId = r.rows[0].id;
+        return nbaLeagueId;
+      }
+    }
+    throw err;
+  }
 }
 
 export async function getOrCreateSeason(leagueId, yearStart, yearEnd) {
