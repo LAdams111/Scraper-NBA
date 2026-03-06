@@ -19,8 +19,9 @@ export async function getPlayerBySrId(srPlayerId) {
 }
 
 /**
- * Insert player into players table. Uses ON CONFLICT (sr_player_id) DO NOTHING
- * so the same player is never inserted twice. Returns player id (new or existing).
+ * Insert player into players table. Does not use ON CONFLICT so it works
+ * whether or not there is a UNIQUE constraint on sr_player_id.
+ * Checks for existing player first to avoid duplicates.
  */
 export async function insertPlayer(data) {
   const {
@@ -42,12 +43,18 @@ export async function insertPlayer(data) {
   }
 
   try {
+    const existing = await query('SELECT id FROM players WHERE sr_player_id = $1', [sr_player_id]);
+    if (existing.rows.length > 0) {
+      const playerId = existing.rows[0].id;
+      await ensureExternalId(playerId, sr_player_id);
+      return playerId;
+    }
+
     const ins = await query(
       `INSERT INTO players (
         full_name, first_name, last_name, birth_date, birth_place,
         height_cm, weight_kg, position, nationality, sr_player_id
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      ON CONFLICT (sr_player_id) DO NOTHING
       RETURNING id`,
       [
         full_name ?? null,
@@ -62,24 +69,8 @@ export async function insertPlayer(data) {
         sr_player_id,
       ]
     );
-
-    let playerId;
-    if (ins.rows.length > 0) {
-      playerId = ins.rows[0].id;
-    } else {
-      const existing = await query('SELECT id FROM players WHERE sr_player_id = $1', [sr_player_id]);
-      playerId = existing.rows.length > 0 ? existing.rows[0].id : null;
-    }
-
-    if (playerId) {
-      await query(
-        `INSERT INTO player_external_ids (player_id, source, external_id)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (player_id, source) DO UPDATE SET external_id = $3`,
-        [playerId, SOURCE_BR, sr_player_id]
-      );
-    }
-
+    const playerId = ins.rows[0].id;
+    await ensureExternalId(playerId, sr_player_id);
     return playerId;
   } catch (err) {
     console.error('[playerService] insertPlayer error:', err.message);
@@ -88,16 +79,34 @@ export async function insertPlayer(data) {
 }
 
 /**
+ * Ensure player_external_ids row exists. Uses check-then-insert/update
+ * so it works with or without a UNIQUE constraint on (player_id, source).
+ */
+async function ensureExternalId(playerId, srPlayerId) {
+  const r = await query(
+    'SELECT id FROM player_external_ids WHERE player_id = $1 AND source = $2',
+    [playerId, SOURCE_BR]
+  );
+  if (r.rows.length > 0) {
+    await query(
+      'UPDATE player_external_ids SET external_id = $3 WHERE player_id = $1 AND source = $2',
+      [playerId, SOURCE_BR, srPlayerId]
+    );
+  } else {
+    await query(
+      `INSERT INTO player_external_ids (player_id, source, external_id)
+       VALUES ($1, $2, $3)`,
+      [playerId, SOURCE_BR, srPlayerId]
+    );
+  }
+}
+
+/**
  * Ensure external_id row exists for existing player.
  */
 export async function upsertExternalId(playerId, srPlayerId) {
   try {
-    await query(
-      `INSERT INTO player_external_ids (player_id, source, external_id)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (player_id, source) DO UPDATE SET external_id = $3`,
-      [playerId, SOURCE_BR, srPlayerId]
-    );
+    await ensureExternalId(playerId, srPlayerId);
   } catch (err) {
     console.error('[playerService] upsertExternalId error:', err.message);
     throw err;

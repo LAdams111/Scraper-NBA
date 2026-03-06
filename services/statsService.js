@@ -39,36 +39,51 @@ export async function upsertPlayerSeasonAndStats(playerId, teamSeasonId, jerseyN
     ft_pct,
   } = stats || {};
 
-  await pool.query(
-    `INSERT INTO player_season_stats (
-      player_season_id, games, minutes, points, rebounds, assists,
-      steals, blocks, fg_pct, three_pct, ft_pct
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-    ON CONFLICT (player_season_id) DO UPDATE SET
-      games = EXCLUDED.games,
-      minutes = EXCLUDED.minutes,
-      points = EXCLUDED.points,
-      rebounds = EXCLUDED.rebounds,
-      assists = EXCLUDED.assists,
-      steals = EXCLUDED.steals,
-      blocks = EXCLUDED.blocks,
-      fg_pct = EXCLUDED.fg_pct,
-      three_pct = EXCLUDED.three_pct,
-      ft_pct = EXCLUDED.ft_pct`,
-    [
-      playerSeasonId,
-      games ?? null,
-      minutes ?? null,
-      points ?? null,
-      rebounds ?? null,
-      assists ?? null,
-      steals ?? null,
-      blocks ?? null,
-      fg_pct ?? null,
-      three_pct ?? null,
-      ft_pct ?? null,
-    ]
+  const statRow = await pool.query(
+    'SELECT id FROM player_season_stats WHERE player_season_id = $1',
+    [playerSeasonId]
   );
+  if (statRow.rows.length > 0) {
+    await pool.query(
+      `UPDATE player_season_stats SET
+        games = $2, minutes = $3, points = $4, rebounds = $5, assists = $6,
+        steals = $7, blocks = $8, fg_pct = $9, three_pct = $10, ft_pct = $11
+       WHERE player_season_id = $1`,
+      [
+        playerSeasonId,
+        games ?? null,
+        minutes ?? null,
+        points ?? null,
+        rebounds ?? null,
+        assists ?? null,
+        steals ?? null,
+        blocks ?? null,
+        fg_pct ?? null,
+        three_pct ?? null,
+        ft_pct ?? null,
+      ]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO player_season_stats (
+        player_season_id, games, minutes, points, rebounds, assists,
+        steals, blocks, fg_pct, three_pct, ft_pct
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [
+        playerSeasonId,
+        games ?? null,
+        minutes ?? null,
+        points ?? null,
+        rebounds ?? null,
+        assists ?? null,
+        steals ?? null,
+        blocks ?? null,
+        fg_pct ?? null,
+        three_pct ?? null,
+        ft_pct ?? null,
+      ]
+    );
+  }
   return playerSeasonId;
 }
 
