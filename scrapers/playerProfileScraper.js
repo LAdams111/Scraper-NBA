@@ -168,13 +168,20 @@ function extractSeasonRowsFromTable($, $table) {
     const fg3Pct = parseCellPct($tr, 'fg3_pct');
     const ftPct = parseCellPct($tr, 'ft_pct');
 
+    // Totals columns (used when per-game columns are missing, e.g. in some comment tables)
+    const ptsTotal = parseCellNum($tr, 'pts');
+    const trbTotal = parseCellNum($tr, 'trb');
+    const astTotal = parseCellNum($tr, 'ast');
+    const stlTotal = parseCellNum($tr, 'stl');
+    const blkTotal = parseCellNum($tr, 'blk');
+
     const games = g;
-    const minutes = g != null && mp != null ? Math.round(g * mp * 100) / 100 : null;
-    const points = g != null && ptsPerG != null ? Math.round(g * ptsPerG) : null;
-    const rebounds = g != null && trbPerG != null ? Math.round(g * trbPerG * 100) / 100 : null;
-    const assists = g != null && astPerG != null ? Math.round(g * astPerG * 100) / 100 : null;
-    const steals = g != null && stlPerG != null ? Math.round(g * stlPerG * 100) / 100 : null;
-    const blocks = g != null && blkPerG != null ? Math.round(g * blkPerG * 100) / 100 : null;
+    const minutes = g != null && mp != null ? Math.round(g * mp * 100) / 100 : (parseCellNum($tr, 'mp') ?? null);
+    const points = g != null && ptsPerG != null ? Math.round(g * ptsPerG) : (ptsTotal ?? null);
+    const rebounds = g != null && trbPerG != null ? Math.round(g * trbPerG * 100) / 100 : (trbTotal ?? null);
+    const assists = g != null && astPerG != null ? Math.round(g * astPerG * 100) / 100 : (astTotal ?? null);
+    const steals = g != null && stlPerG != null ? Math.round(g * stlPerG * 100) / 100 : (stlTotal ?? null);
+    const blocks = g != null && blkPerG != null ? Math.round(g * blkPerG * 100) / 100 : (blkTotal ?? null);
 
     const [yStart, yEnd] = season.split('-').map((x) => parseInt(x, 10));
     const yearEnd = yEnd < 50 ? 2000 + yEnd : 1900 + yEnd;
