@@ -47,6 +47,7 @@ async function setNbaCountryUsa() {
   } catch (_) {
     // Ignore if leagues.country column does not exist
   }
+}
 
 export async function getOrCreateSeason(leagueId, yearStart, yearEnd) {
   const r = await pool.query(
