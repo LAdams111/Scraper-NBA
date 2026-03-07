@@ -93,27 +93,43 @@ function parseProfile($) {
  * Parse per_game table (Regular Season only) into season rows.
  * Basketball-Reference often puts the table inside an HTML comment; parseSeasonRowsFromTable
  * runs on the main doc, and parseSeasonRowsFromComments extracts from <!-- ... --> if needed.
+ * We try the known "Per Game" wrapper first, then only accept results from other comments
+ * when at least one row has games_played > 1 (so we don't use a wrong table with g=1).
  */
 function parseSeasonRowsFromComments(rawHtml) {
+  const tryComment = (commentContent) => {
+    if (!commentContent || commentContent.length < 300) return [];
+    try {
+      const $ = cheerio.load(commentContent);
+      const rows = parseSeasonRowsFromTable($);
+      const hasFullSeasons = rows.some((r) => (r.games_played || 0) > 1);
+      if (rows.length > 0 && hasFullSeasons) return rows;
+      return [];
+    } catch (_) {
+      return [];
+    }
+  };
+
+  const patterns = [
+    /<div[^>]*id="all_per_game"[^>]*>\s*<!--\s*([\s\S]*?)-->/i,
+    /<div[^>]*id="all_per_game_stats"[^>]*>\s*<!--\s*([\s\S]*?)-->/i,
+  ];
+  for (const re of patterns) {
+    const m = rawHtml.match(re);
+    if (m && m[1]) {
+      const rows = tryComment(m[1]);
+      if (rows.length > 0) return rows;
+    }
+  }
+
   const commentRegex = /<!--([\s\S]*?)-->/g;
   let match;
   while ((match = commentRegex.exec(rawHtml)) !== null) {
     const commentContent = match[1];
     if (commentContent.length < 300) continue;
     if (!commentContent.includes('season') && !commentContent.includes('pts_per_g') && !commentContent.includes('team_id') && !commentContent.includes('per_game')) continue;
-    try {
-      const $ = cheerio.load(commentContent);
-      const rows = parseSeasonRowsFromTable($);
-      if (rows.length > 0) return rows;
-    } catch (_) {}
-  }
-  const allPerGameMatch = rawHtml.match(/<div[^>]*id="all_per_game"[^>]*>\s*<!--\s*([\s\S]*?)-->/i);
-  if (allPerGameMatch) {
-    try {
-      const $ = cheerio.load(allPerGameMatch[1]);
-      const rows = parseSeasonRowsFromTable($);
-      if (rows.length > 0) return rows;
-    } catch (_) {}
+    const rows = tryComment(commentContent);
+    if (rows.length > 0) return rows;
   }
   return [];
 }
@@ -121,12 +137,13 @@ function parseSeasonRowsFromComments(rawHtml) {
 function parseSeasonRowsFromTable($) {
   const rows = [];
   let $table = $('table#per_game').first();
+  if (!$table.length) $table = $('table#per_game_stats').first();
   if (!$table.length) {
     $('table').each((_, table) => {
       if (rows.length > 0) return;
       const $t = $(table);
-      const hasSeason = $t.find('tbody tr th[data-stat="season"]').length + $t.find('tbody tr th[data-stat="Season"]').length;
-      const hasTeam = $t.find('tbody tr td[data-stat="team_id"]').length;
+      const hasSeason = $t.find('tbody tr th[data-stat="season"]').length + $t.find('tbody tr th[data-stat="Season"]').length + $t.find('tbody tr th[data-stat="year_id"]').length;
+      const hasTeam = $t.find('tbody tr td[data-stat="team_id"]').length + $t.find('tbody tr td[data-stat="team_name_abbr"]').length;
       const hasPts = $t.find('tbody tr td[data-stat="pts_per_g"]').length;
       if ((hasSeason || hasTeam) && (hasPts || hasTeam)) {
         const r = extractSeasonRowsFromTable($, $t);
@@ -197,15 +214,21 @@ function extractSeasonRowsFromTable($, $table) {
       const sc = $tr.find('th[data-stat="Season"]');
       season = (sc.find('a').length ? sc.find('a') : sc).text().trim();
     }
+    if (!season && $tr.find('th[data-stat="year_id"]').length) {
+      const yc = $tr.find('th[data-stat="year_id"]');
+      season = (yc.find('a').length ? yc.find('a') : yc).text().trim();
+    }
     if (!season || !/^\d{4}-\d{2}$/.test(season)) return;
     const teamAbbrev = $tr.find('td[data-stat="team_id"] a').text().trim()
-      || $tr.find('td[data-stat="team_id"]').text().trim();
-    const lg = ($tr.find('td[data-stat="lg_id"]').text() || '').trim();
+      || $tr.find('td[data-stat="team_id"]').text().trim()
+      || $tr.find('td[data-stat="team_name_abbr"] a').text().trim()
+      || $tr.find('td[data-stat="team_name_abbr"]').text().trim();
+    const lg = ($tr.find('td[data-stat="lg_id"]').text() || $tr.find('td[data-stat="comp_name_abbr"]').text() || '').trim();
     if (lg && lg !== 'NBA') return;
 
-    const g = parseCellNum($tr, 'g');
-    const gs = parseCellNum($tr, 'gs');
-    const mp = parseCellNum($tr, 'mp');
+    const g = parseCellNum($tr, 'g') ?? parseCellNum($tr, 'games');
+    const gs = parseCellNum($tr, 'gs') ?? parseCellNum($tr, 'games_started');
+    const mp = parseCellNum($tr, 'mp') ?? parseCellNum($tr, 'mp_per_g');
     const ptsPerG = parseCellNum($tr, 'pts_per_g');
     const trbPerG = parseCellNum($tr, 'trb_per_g');
     const astPerG = parseCellNum($tr, 'ast_per_g');
