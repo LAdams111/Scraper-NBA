@@ -42,6 +42,7 @@ export async function upsertPlayerSeasonAndStats(playerId, teamSeasonId, jerseyN
   } = stats || {};
 
   const gamesInt = games != null ? Math.round(Number(games)) : null;
+  const minutesSafe = minutes != null && !Number.isNaN(Number(minutes)) ? Math.round(Number(minutes)) : null;
 
   const statRow = await pool.query(
     'SELECT id FROM player_season_stats WHERE player_season_id = $1',
@@ -56,7 +57,7 @@ export async function upsertPlayerSeasonAndStats(playerId, teamSeasonId, jerseyN
       [
         playerSeasonId,
         gamesInt,
-        minutes ?? null,
+        minutesSafe ?? null,
         points ?? null,
         rebounds ?? null,
         assists ?? null,
@@ -76,7 +77,7 @@ export async function upsertPlayerSeasonAndStats(playerId, teamSeasonId, jerseyN
       [
         playerSeasonId,
         gamesInt,
-        minutes ?? null,
+        minutesSafe ?? null,
         points ?? null,
         rebounds ?? null,
         assists ?? null,

@@ -46,6 +46,26 @@ export async function insertPlayer(data) {
     const existing = await query('SELECT id FROM players WHERE sr_player_id = $1', [sr_player_id]);
     if (existing.rows.length > 0) {
       const playerId = existing.rows[0].id;
+      await query(
+        `UPDATE players SET
+          full_name = COALESCE($2, full_name), first_name = COALESCE($3, first_name), last_name = COALESCE($4, last_name),
+          birth_date = COALESCE($5, birth_date), birth_place = COALESCE($6, birth_place),
+          height_cm = COALESCE($7, height_cm), weight_kg = COALESCE($8, weight_kg),
+          position = COALESCE($9, position), nationality = COALESCE($10, nationality)
+         WHERE id = $1`,
+        [
+          playerId,
+          full_name ?? null,
+          first_name ?? null,
+          last_name ?? null,
+          birth_date ?? null,
+          birth_place ?? null,
+          height_cm ?? null,
+          weight_kg ?? null,
+          position ?? null,
+          nationality ?? null,
+        ]
+      );
       await ensureExternalId(playerId, sr_player_id);
       return playerId;
     }
